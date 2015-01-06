@@ -163,7 +163,7 @@ $(document).ready(function() {
         console.log('chatterbox: Message sent');
       },
       error: function (data) {
-        console.dir(data);
+        console.dir(data.success(), '|', data.error());
         console.error('chatterbox: Failed to send message');
       }
     });

@@ -40,4 +40,4 @@ node_modules
 .idea/
 
 ###Database file of messages ###
-./server/database/*
+server/database/*

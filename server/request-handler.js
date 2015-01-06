@@ -1,3 +1,7 @@
+var fs = require('fs');
+var url = require('url');
+var path = require('path');
+
 // These headers will allow Cross-Origin Resource Sharing (CORS).
 // This code allows this server to talk to websites that
 // are on different domains, for instance, your chat client.
@@ -14,8 +18,19 @@ var defaultCorsHeaders = {
   'access-control-max-age': 10 // Seconds.
 };
 
+var mimeTypes = {
+  'html': 'text/html',
+  'jpeg': 'image/jpeg',
+  'jpg': 'image/jpeg',
+  'png': 'image/png',
+  'js': 'text/javascript',
+  'css': 'text/css'
+};
+
 exports.requestHandler = function(request, response) {
-  var fs = require('fs');
+  var uri = url.parse(request.url).pathname;
+  // console.log(uri);
+
   // The outgoing status.
   var statusCode = 200;
   var headers = defaultCorsHeaders;
@@ -30,7 +45,14 @@ exports.requestHandler = function(request, response) {
     // respond to the request
     response.writeHead(200, headers);
     response.end();
-  } else if(request.url === '/messages') {
+  } else if(uri === '/') {
+    //this is functional, but the resources (app.js, styles.css, etc) do not load properly
+    fs.readFile('../client/client/index.html', function(err, file) {
+      headers['Content-Type'] = 'text/html';
+      response.writeHead(200, headers);
+      response.end(file);
+    });
+  } else if(uri === '/messages') {
     if(request.method === 'GET') {
       returnMessagesFromFile();
     } else if (request.method === 'POST') {
@@ -44,17 +66,24 @@ exports.requestHandler = function(request, response) {
       });
       return;
     }
-  } else if(request.url === '/') {
-    //this is functional, but the resources (app.js, styles.css, etc) do not load properly
-    fs.readFile('../client/client/index.html', function(err, file) {
-      headers['Content-Type'] = 'text/html';
-      response.writeHead(200, headers);
-      response.end(file);
-    });
   } else {
-    headers['Content-Type'] = 'text/plain';
-    response.writeHead(404, headers);
-    response.end('You done goofed.');
+    var filename = path.join('./../client', uri);
+    // console.log('filename:', filename);
+    path.exists(filename, function(exists) {
+      if(!exists) {
+        console.log('does not exist');
+        headers['Content-Type'] = 'text/plain';
+        response.writeHead(404, headers);
+        response.end('You done goofed.');
+      }
+      // console.log('it does exist!');
+      var mimeType = mimeTypes[path.extname(filename).split('.')[1]];
+      headers['Content-Type'] = mimeType;
+      response.writeHead(200, headers);
+
+      var fileStream = fs.createReadStream(filename);
+      fileStream.pipe(response);
+    });
   }
 
   function returnMessagesFromFile() {
@@ -96,7 +125,7 @@ exports.requestHandler = function(request, response) {
       parsedNewMessage['time'] = Date.now();
 
       //messages is our temporary object that we have read from the file
-      messages.results.push(parsedNewMessage);
+      messages.results.unshift(parsedNewMessage);
 
       fs.writeFile('./database/messages.txt', JSON.stringify(messages), function(err) {
         if(err) {
@@ -106,8 +135,8 @@ exports.requestHandler = function(request, response) {
           return;
         }
 
-        response.writeHead(200, headers);
-        response.end('It has been done.');
+        response.writeHead(201, headers);
+        response.end();
         return;
       });
     });
