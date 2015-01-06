@@ -34,7 +34,7 @@ exports.requestHandler = function(request, response) {
     if(request.method === 'GET') {
       returnMessagesFromFile();
     } else if (request.method === 'POST') {
-      console.log('post request');
+      //Post is a node object, which sends data in chunks, while emitting the 'data' event each time
       var body = '';
       request.on('data', function (chunk) {
         body += chunk;
@@ -44,8 +44,8 @@ exports.requestHandler = function(request, response) {
       });
       return;
     }
-    // var data = {};
   } else if(request.url === '/') {
+    //this is functional, but the resources (app.js, styles.css, etc) do not load properly
     fs.readFile('../client/client/index.html', function(err, file) {
       headers['Content-Type'] = 'text/html';
       response.writeHead(200, headers);
@@ -53,7 +53,7 @@ exports.requestHandler = function(request, response) {
     });
   } else {
     headers['Content-Type'] = 'text/plain';
-    response.writeHead(450, headers);
+    response.writeHead(404, headers);
     response.end('You done goofed.');
   }
 
@@ -85,14 +85,17 @@ exports.requestHandler = function(request, response) {
         return;
       }
 
-      console.log('data.toJSON: ', '|' + data.toString() === '' + '|');
       if(data.toString() === '') {
         data = '{"results" : []}';
       }
+
+      //the data we are storing in messages.txt is a string in JSON format, so when we convert it from a buffer object to a string, it is in JSON format.
       var messages = JSON.parse(data.toString());
+      //the message the client is sending is in JSON format as well.
       var parsedNewMessage = JSON.parse(newMessage);
       parsedNewMessage['time'] = Date.now();
 
+      //messages is our temporary object that we have read from the file
       messages.results.push(parsedNewMessage);
 
       fs.writeFile('./database/messages.txt', JSON.stringify(messages), function(err) {
@@ -117,6 +120,7 @@ exports.requestHandler = function(request, response) {
 //>finish get
 //>finish post
 //>connect our app to it.
+//figure out how to serve a static page without using readFile
 //modify URL handling- create rooms, etc.
 //sanitize input
 
