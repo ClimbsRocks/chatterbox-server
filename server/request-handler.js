@@ -1,59 +1,6 @@
-/*************************************************************
-
-You should implement your request handler function in this file.
-
-requestHandler is already getting passed to http.createServer()
-in basic-server.js, but it won't work as is.
-
-You'll have to figure out a way to export this function from
-this file and include it in basic-server.js so that it actually works.
-
-*Hint* Check out the node module documentation at http://nodejs.org/api/modules.html.
-
-**************************************************************/
-
-var requestHandler = function(request, response) {
-  // Request and Response come from node's http module.
-  //
-  // They include information about both the incoming request, such as
-  // headers and URL, and about the outgoing response, such as its status
-  // and content.
-  //
-  // Documentation for both request and response can be found in the HTTP section at
-  // http://nodejs.org/documentation/api/
-
-  // Do some basic logging.
-  //
-  // Adding more logging to your server can be an easy way to get passive
-  // debugging help, but you should always be careful about leaving stray
-  // console.logs in your code.
-  console.log("Serving request type " + request.method + " for url " + request.url);
-
-  // The outgoing status.
-  var statusCode = 200;
-
-  // See the note below about CORS headers.
-  var headers = defaultCorsHeaders;
-
-  // Tell the client we are sending them plain text.
-  //
-  // You will need to change this if you are sending something
-  // other than plain text, like JSON or HTML.
-  headers['Content-Type'] = "text/plain";
-
-  // .writeHead() writes to the request line and headers of the response,
-  // which includes the status and all headers.
-  response.writeHead(statusCode, headers);
-
-  // Make sure to always call response.end() - Node may not send
-  // anything back to the client until you do. The string you pass to
-  // response.end() will be the body of the response - i.e. what shows
-  // up in the browser.
-  //
-  // Calling .end "flushes" the response's internal buffer, forcing
-  // node to actually send all the data over to the client.
-  response.end("Hello, World!");
-};
+var fs = require('fs');
+var url = require('url');
+var path = require('path');
 
 // These headers will allow Cross-Origin Resource Sharing (CORS).
 // This code allows this server to talk to websites that
@@ -65,9 +12,144 @@ var requestHandler = function(request, response) {
 // Another way to get around this restriction is to serve you chat
 // client from this domain by setting up static file serving.
 var defaultCorsHeaders = {
-  "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "access-control-allow-headers": "content-type, accept",
-  "access-control-max-age": 10 // Seconds.
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'access-control-allow-headers': 'content-type, accept',
+  'access-control-max-age': 10 // Seconds.
 };
+
+var mimeTypes = {
+  'html': 'text/html',
+  'jpeg': 'image/jpeg',
+  'jpg': 'image/jpeg',
+  'png': 'image/png',
+  'js': 'text/javascript',
+  'css': 'text/css'
+};
+
+exports.requestHandler = function(request, response) {
+  var uri = url.parse(request.url).pathname;
+  // console.log(uri);
+
+  // The outgoing status.
+  var statusCode = 200;
+  var headers = defaultCorsHeaders;
+  if (request.method === 'OPTIONS') {
+    // add needed headers
+    var headers = {};
+    headers['Access-Control-Allow-Origin'] = '*';
+    headers['Access-Control-Allow-Methods'] = 'POST, GET, PUT, DELETE, OPTIONS';
+    headers['Access-Control-Allow-Credentials'] = true;
+    headers['Access-Control-Max-Age'] = '86400'; // 24 hours
+    headers['Access-Control-Allow-Headers'] = 'X-Requested-With, Access-Control-Allow-Origin, X-HTTP-Method-Override, Content-Type, Authorization, Accept';
+    // respond to the request
+    response.writeHead(200, headers);
+    response.end();
+  } else if(uri === '/') {
+    //this is functional, but the resources (app.js, styles.css, etc) do not load properly
+    fs.readFile('../client/client/index.html', function(err, file) {
+      headers['Content-Type'] = 'text/html';
+      response.writeHead(200, headers);
+      response.end(file);
+    });
+  } else if(uri === '/messages') {
+    if(request.method === 'GET') {
+      returnMessagesFromFile();
+    } else if (request.method === 'POST') {
+      //Post is a node object, which sends data in chunks, while emitting the 'data' event each time
+      var body = '';
+      request.on('data', function (chunk) {
+        body += chunk;
+      });
+      request.on('end', function () {
+        postMessageToFile(body);
+      });
+      return;
+    }
+  } else {
+    var filename = path.join('./../client', uri);
+    // console.log('filename:', filename);
+    path.exists(filename, function(exists) {
+      if(!exists) {
+        console.log('does not exist');
+        headers['Content-Type'] = 'text/plain';
+        response.writeHead(404, headers);
+        response.end('You done goofed.');
+      }
+      // console.log('it does exist!');
+      var mimeType = mimeTypes[path.extname(filename).split('.')[1]];
+      headers['Content-Type'] = mimeType;
+      response.writeHead(200, headers);
+
+      var fileStream = fs.createReadStream(filename);
+      fileStream.pipe(response);
+    });
+  }
+
+  function returnMessagesFromFile() {
+    fs.readFile('./database/messages.txt', function(err, messages) {
+
+      if(err) {
+        console.error(err);
+        response.writeHead(500, headers);
+        response.end('We let you down.');
+        return;
+      }
+
+      messages = messages.toString() || '{"results": []}';
+
+      response.writeHead(statusCode, headers);
+      headers['Content-Type'] = 'application/json';
+      response.end(messages);
+    });
+  }
+
+  function postMessageToFile(newMessage) {
+    fs.readFile('./database/messages.txt', function(err, data) {
+
+      if(err) {
+        console.error(err);
+        response.writeHead(500, headers);
+        response.end('We let you down.');
+        return;
+      }
+
+      if(data.toString() === '') {
+        data = '{"results" : []}';
+      }
+
+      //the data we are storing in messages.txt is a string in JSON format, so when we convert it from a buffer object to a string, it is in JSON format.
+      var messages = JSON.parse(data.toString());
+      //the message the client is sending is in JSON format as well.
+      var parsedNewMessage = JSON.parse(newMessage);
+      parsedNewMessage['time'] = Date.now();
+
+      //messages is our temporary object that we have read from the file
+      messages.results.unshift(parsedNewMessage);
+
+      fs.writeFile('./database/messages.txt', JSON.stringify(messages), function(err) {
+        if(err) {
+          console.error(err);
+          response.writeHead(500, headers);
+          response.end('We let you down.');
+          return;
+        }
+
+        response.writeHead(201, headers);
+        response.end();
+        return;
+      });
+    });
+  }
+};
+
+
+//next steps:
+//>set up our database file- likely a json object
+//>finish get
+//>finish post
+//>connect our app to it.
+//figure out how to serve a static page without using readFile
+//modify URL handling- create rooms, etc.
+//sanitize input
 
