@@ -68,21 +68,20 @@ exports.requestHandler = function(request, response) {
     }
   } else {
     var filename = path.join('./../client', uri);
-    // console.log('filename:', filename);
     path.exists(filename, function(exists) {
       if(!exists) {
         console.log('does not exist');
         headers['Content-Type'] = 'text/plain';
         response.writeHead(404, headers);
         response.end('You done goofed.');
-      }
-      // console.log('it does exist!');
-      var mimeType = mimeTypes[path.extname(filename).split('.')[1]];
-      headers['Content-Type'] = mimeType;
-      response.writeHead(200, headers);
+      } else {
+        var mimeType = mimeTypes[path.extname(filename).split('.')[1]];
+        headers['Content-Type'] = mimeType;
+        response.writeHead(200, headers);
 
-      var fileStream = fs.createReadStream(filename);
-      fileStream.pipe(response);
+        var fileStream = fs.createReadStream(filename);
+        fileStream.pipe(response);
+      }
     });
   }
 
@@ -94,13 +93,13 @@ exports.requestHandler = function(request, response) {
         response.writeHead(500, headers);
         response.end('We let you down.');
         return;
+        
+      } else {
+        messages = messages.toString() || '{"results": []}';
+        response.writeHead(statusCode, headers);
+        headers['Content-Type'] = 'application/json';
+        response.end(messages);
       }
-
-      messages = messages.toString() || '{"results": []}';
-
-      response.writeHead(statusCode, headers);
-      headers['Content-Type'] = 'application/json';
-      response.end(messages);
     });
   }
 
@@ -142,14 +141,3 @@ exports.requestHandler = function(request, response) {
     });
   }
 };
-
-
-//next steps:
-//>set up our database file- likely a json object
-//>finish get
-//>finish post
-//>connect our app to it.
-//figure out how to serve a static page without using readFile
-//modify URL handling- create rooms, etc.
-//sanitize input
-
